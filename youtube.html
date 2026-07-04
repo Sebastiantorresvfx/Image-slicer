@@ -64,12 +64,15 @@ input:focus{border-color:var(--accent3)}
 /* progress */
 #panel{display:none}
 #panel.show{display:block}
-.bar{height:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:99px;overflow:hidden;margin:10px 0 8px}
+.bar{height:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:99px;overflow:hidden;margin:10px 0 8px;position:relative}
 .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent3),var(--accent));border-radius:99px;transition:width .5s}
+.bar.indet i{width:38%;animation:slide 1.3s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-38%}100%{margin-left:100%}}
 #stage{font-size:.72rem;color:var(--accent3);letter-spacing:.06em}
 #pct{float:right;font-size:.72rem;color:var(--muted)}
 #vtitle{font-size:.8rem;color:var(--text);margin-top:8px;word-break:break-word;display:none}
 #err{display:none;font-size:.75rem;color:var(--err);line-height:1.5;margin-top:8px;word-break:break-word}
+#err a{color:var(--err)}
 
 #save{
   display:none;width:100%;text-align:center;text-decoration:none;margin-top:12px;
@@ -84,11 +87,12 @@ details[open] summary::before{content:'▾ '}
 details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
 .hint{font-size:.68rem;color:var(--muted);line-height:1.65}
 .hint b{color:var(--text);font-weight:500}
+.hint a{color:var(--accent3);text-decoration:none}
 </style>
 </head>
 <body>
 <main>
-  <h1>// YT SAVER <span>720 · 1080</span></h1>
+  <h1>// YT SAVER <span>720 · 1080 · via GitHub Actions</span></h1>
 
   <div class="card">
     <label for="url">YouTube link</label>
@@ -106,7 +110,7 @@ details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
     <button id="go">DOWNLOAD</button>
 
     <div id="panel">
-      <div class="bar"><i id="fill"></i></div>
+      <div class="bar" id="bar"><i id="fill"></i></div>
       <span id="stage"></span><span id="pct"></span>
       <div id="vtitle"></div>
       <div id="err"></div>
@@ -116,25 +120,34 @@ details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
 
   <div class="card">
     <details id="setup">
-      <summary>Setup — backend &amp; access key</summary>
+      <summary>Setup — GitHub token</summary>
       <div class="inner">
         <div>
-          <label for="backend">Backend URL (Railway)</label>
-          <input type="url" id="backend" placeholder="https://your-app.up.railway.app" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <label for="token">Fine-grained personal access token</label>
+          <input type="password" id="token" placeholder="github_pat_…" autocomplete="off">
         </div>
         <div>
-          <label for="key">Access key (YT_PASSWORD)</label>
-          <input type="password" id="key" placeholder="the secret you set on the server" autocomplete="off">
+          <label for="repo">Workflow repo (owner/name)</label>
+          <input type="text" id="repo" autocomplete="off" autocapitalize="off" spellcheck="false">
         </div>
-        <div class="hint">Saved on this device only. Set the same value as the <b>YT_PASSWORD</b> variable on your Railway service.</div>
+        <div class="hint">
+          Create the token at <b>github.com → Settings → Developer settings →
+          Fine-grained tokens</b>:<br>
+          · Repository access: <b>Only select repositories</b> → the workflow repo above<br>
+          · Permissions → <b>Actions: Read &amp; write</b>, <b>Contents: Read &amp; write</b><br>
+          Saved on this device only.
+        </div>
       </div>
     </details>
   </div>
 
   <div class="card hint">
-    <b>iPhone tips</b><br>
+    <b>How it works / iPhone tips</b><br>
+    · Each download runs as a GitHub Actions job in your private repo — expect
+      ~1 min of spin-up before the real download starts.<br>
     · The video lands in Safari's download manager → <b>Files ▸ Downloads</b>.<br>
     · To move it into your camera roll: open it in Files, tap Share, then <b>Save Video</b>.<br>
+    · Files are auto-deleted from GitHub after ~12 h.<br>
     · Add this page to your Home Screen for one-tap access.
   </div>
 </main>
@@ -142,15 +155,20 @@ details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const store = { get k(){return localStorage.getItem('ytdl_key')||''},   set k(v){localStorage.setItem('ytdl_key',v)},
-                  get b(){return localStorage.getItem('ytdl_backend')||''}, set b(v){localStorage.setItem('ytdl_backend',v)},
-                  get q(){return localStorage.getItem('ytdl_quality')||'1080'}, set q(v){localStorage.setItem('ytdl_quality',v)} };
+  const DEFAULT_REPO = 'Sebastiantorresvfx/storyboard-composer-backend';
+  const WORKFLOW = 'yt-download.yml';
+  const store = {
+    get t(){return localStorage.getItem('ytgh_token')||''}, set t(v){localStorage.setItem('ytgh_token',v)},
+    get r(){return localStorage.getItem('ytgh_repo')||DEFAULT_REPO}, set r(v){localStorage.setItem('ytgh_repo',v)},
+    get q(){return localStorage.getItem('ytdl_quality')||'1080'}, set q(v){localStorage.setItem('ytdl_quality',v)},
+    get api(){return localStorage.getItem('ytgh_api')||'https://api.github.com'} // overridable for testing
+  };
 
   // ---- settings ----
-  $('backend').value = store.b; $('key').value = store.k;
-  $('backend').addEventListener('change', e => store.b = e.target.value.trim().replace(/\/+$/,''));
-  $('key').addEventListener('change', e => store.k = e.target.value.trim());
-  if (!store.b || !store.k) $('setup').open = true;
+  $('token').value = store.t; $('repo').value = store.r;
+  $('token').addEventListener('change', e => store.t = e.target.value.trim());
+  $('repo').addEventListener('change', e => store.r = (e.target.value.trim() || DEFAULT_REPO));
+  if (!store.t) $('setup').open = true;
 
   // ---- quality toggle ----
   const segBtns = [...document.querySelectorAll('#quality button')];
@@ -163,70 +181,162 @@ details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
     try { const t = await navigator.clipboard.readText(); if (t) $('url').value = t.trim(); } catch { $('url').focus(); }
   });
 
-  // ---- download flow ----
-  const STAGE_LABEL = { queued:'Queued…', starting:'Preparing…', video:'Downloading video', audio:'Downloading audio', merging:'Merging streams', done:'Ready!' };
-  let polling = null, autoSaved = false;
+  // ---- GitHub API helper ----
+  async function gh(path, opts = {}) {
+    const res = await fetch(store.api + path, {
+      ...opts,
+      headers: {
+        'authorization': 'Bearer ' + store.t,
+        'accept': 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+        ...(opts.headers || {})
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    if (res.status === 204) return {};
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('GitHub rejected the token — check it in Setup.');
+      if (res.status === 404) throw new Error('Not found (404) — check the repo name in Setup and that the token can access it.');
+      throw new Error(body.message || ('GitHub error ' + res.status));
+    }
+    return body;
+  }
 
+  // ---- download flow ----
+  const STEP_LABEL = {
+    'Check request': 'Validating…', 'Tidy up old files': 'Preparing…',
+    'Install yt-dlp': 'Preparing…', 'Download video': 'Downloading on GitHub…',
+    'Publish file': 'Publishing…'
+  };
+  let ticking = null, startedAt = 0;
+
+  function elapsed() {
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    return String(Math.floor(s/60)) + ':' + String(s%60).padStart(2,'0');
+  }
   function ui(state) {                       // 'idle' | 'busy' | 'done' | 'error'
     $('go').disabled = state === 'busy';
     $('go').textContent = state === 'busy' ? 'WORKING…' : (state === 'done' ? 'DOWNLOAD ANOTHER' : 'DOWNLOAD');
     $('panel').classList.toggle('show', state !== 'idle');
+    $('bar').classList.toggle('indet', state === 'busy');
+    $('fill').style.width = state === 'busy' || state === 'done' ? '100%' : '0%';
     $('save').style.display = state === 'done' ? 'block' : 'none';
     $('err').style.display = state === 'error' ? 'block' : 'none';
-    if (state !== 'done' && state !== 'error') { $('vtitle').style.display = 'none'; }
+    if (state !== 'done' && state !== 'error') $('vtitle').style.display = 'none';
+  }
+  function fail(msg, runUrl) {
+    clearInterval(ticking); ticking = null;
+    $('err').textContent = msg + (runUrl ? ' — ' : '');
+    if (runUrl) { const a = document.createElement('a'); a.href = runUrl; a.textContent = 'view the run log'; a.target = '_blank'; $('err').appendChild(a); }
+    $('stage').textContent = 'Failed'; $('pct').textContent = ''; ui('error');
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function findRun(repo, tag) {
+    // dispatch returns 204 with no run id — find our run by its run-name
+    for (let i = 0; i < 20; i++) {
+      await sleep(3000);
+      const d = await gh(`/repos/${repo}/actions/runs?event=workflow_dispatch&per_page=10`);
+      const run = (d.workflow_runs || []).find(r => (r.display_title || r.name || '').includes(tag));
+      if (run) return run;
+      $('stage').textContent = 'Waiting for GitHub to pick it up…';
+    }
+    throw new Error('The workflow run never appeared — is yt-download.yml on the repo’s main branch?');
   }
 
-  function fail(msg) {
-    clearInterval(polling); polling = null;
-    $('err').textContent = msg;
-    $('stage').textContent = 'Failed'; ui('error');
-  }
-
-  async function api(path, opts = {}) {
-    const res = await fetch(store.b + path, {
-      ...opts,
-      headers: { 'content-type': 'application/json', 'x-yt-key': store.k, ...(opts.headers || {}) }
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || ('Server error ' + res.status));
-    return body;
+  async function currentStep(repo, runId) {
+    try {
+      const d = await gh(`/repos/${repo}/actions/runs/${runId}/jobs`);
+      const job = (d.jobs || [])[0];
+      if (!job) return null;
+      const failed = (job.steps || []).find(s => s.conclusion === 'failure');
+      if (failed) return { failed: failed.name };
+      const cur = (job.steps || []).find(s => s.status === 'in_progress');
+      return cur ? { name: cur.name } : null;
+    } catch { return null; } // step info is cosmetic — never fail the flow over it
   }
 
   $('go').addEventListener('click', async () => {
     const url = $('url').value.trim();
-    if (!store.b)  { $('setup').open = true; return fail('Set your backend URL first (Setup below).'); }
-    if (!store.k)  { $('setup').open = true; return fail('Set your access key first (Setup below).'); }
-    if (!url)      return fail('Paste a YouTube link first.');
+    if (!store.t) { $('setup').open = true; return fail('Paste your GitHub token first (Setup below).'); }
+    if (!url)     return fail('Paste a YouTube link first.');
+    const repo = store.r;
+    const tag = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2,'0')).join('');
 
-    autoSaved = false;
-    $('fill').style.width = '0%'; $('pct').textContent = ''; $('stage').textContent = 'Contacting server…';
+    startedAt = Date.now();
+    $('stage').textContent = 'Asking GitHub to start…'; $('pct').textContent = '';
     ui('busy');
+    ticking = setInterval(() => { $('pct').textContent = elapsed(); }, 1000);
 
-    let id;
-    try { ({ id } = await api('/api/yt/start', { method:'POST', body: JSON.stringify({ url, quality: store.q }) })); }
-    catch (e) { return fail(e.message); }
+    let run;
+    try {
+      await gh(`/repos/${repo}/actions/workflows/${WORKFLOW}/dispatches`,
+               { method: 'POST', body: { ref: 'main', inputs: { url, quality: store.q, tag } } });
+      run = await findRun(repo, tag);
+    } catch (e) { return fail(e.message); }
 
-    polling = setInterval(async () => {
-      let s;
-      try { s = await api('/api/yt/status/' + id); }
-      catch (e) { return fail(e.message); }
-
-      $('stage').textContent = STAGE_LABEL[s.stage] || s.stage;
-      $('fill').style.width = (s.percent || 0) + '%';
-      $('pct').textContent = (s.percent || 0) + '%';
-
-      if (s.state === 'error') return fail(s.error || 'Download failed.');
-      if (s.state === 'done') {
-        clearInterval(polling); polling = null;
-        $('fill').style.width = '100%'; $('pct').textContent = s.size ? (s.size/1048576).toFixed(1) + ' MB' : '';
-        if (s.title) { $('vtitle').textContent = s.title; $('vtitle').style.display = 'block'; }
-        const fileUrl = store.b + '/api/yt/file/' + id + '?key=' + encodeURIComponent(store.k);
-        $('save').href = fileUrl;
-        ui('done');
-        // auto-hand the file to Safari's download manager
-        if (!autoSaved) { autoSaved = true; window.location.href = fileUrl; }
+    // poll the run until it finishes
+    let conclusion = null;
+    try {
+      while (true) {
+        await sleep(3500);
+        const r = await gh(`/repos/${repo}/actions/runs/${run.id}`);
+        if (r.status === 'completed') { conclusion = r.conclusion; break; }
+        if (r.status === 'queued') $('stage').textContent = 'Waiting for a runner…';
+        else {
+          const step = await currentStep(repo, run.id);
+          $('stage').textContent = (step && STEP_LABEL[step.name]) || 'Working…';
+        }
       }
-    }, 1200);
+    } catch (e) { return fail(e.message, run.html_url); }
+
+    if (conclusion !== 'success') {
+      const step = await currentStep(repo, run.id);
+      const at = step && step.failed ? ` at "${step.failed}"` : '';
+      return fail(`GitHub run ${conclusion}${at}. If the log says "confirm you're not a bot", add a YT_COOKIES secret to the repo (see README).`, run.html_url);
+    }
+
+    // grab the release this run published and hand the file to Safari
+    let rel, asset;
+    try {
+      rel = await gh(`/repos/${repo}/releases/tags/yt-${tag}`);
+      asset = (rel.assets || [])[0];
+      if (!asset) throw new Error('The run succeeded but published no file.');
+    } catch (e) { return fail(e.message, run.html_url); }
+
+    clearInterval(ticking); ticking = null;
+    $('vtitle').textContent = rel.name || asset.name; $('vtitle').style.display = 'block';
+    $('pct').textContent = (asset.size / 1048576).toFixed(1) + ' MB';
+    $('stage').textContent = 'Ready!';
+    ui('done');
+
+    // Asset downloads need the auth header, which a plain link can't send.
+    // Fetch the asset endpoint (302 → signed CDN URL), grab the final URL,
+    // abort the body, and navigate — Safari's download manager takes over.
+    const save = async () => {
+      $('save').textContent = 'FETCHING LINK…';
+      try {
+        const ctl = new AbortController();
+        const res = await fetch(`${store.api}/repos/${repo}/releases/assets/${asset.id}`, {
+          headers: { 'authorization': 'Bearer ' + store.t, 'accept': 'application/octet-stream' },
+          signal: ctl.signal
+        });
+        const finalUrl = res.url;
+        if (finalUrl && !finalUrl.startsWith(store.api)) {
+          ctl.abort();                       // stop the body — we only wanted the signed URL
+          window.location.href = finalUrl;   // top-level navigation → download manager
+        } else {
+          // no redirect happened — stream it into a blob as a fallback
+          const blob = await res.blob();
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob); a.download = asset.name; a.click();
+        }
+      } catch (e) { if (e.name !== 'AbortError') fail('Could not fetch the file: ' + e.message, run.html_url); }
+      $('save').textContent = 'SAVE VIDEO ↓';
+    };
+    $('save').onclick = e => { e.preventDefault(); save(); };
+    save(); // auto-save once; the button re-saves if needed
   });
 })();
 </script>
