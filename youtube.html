@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>// YT SAVER</title>
+<meta name="theme-color" content="#0e0e10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="YT Saver">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0e10;--surface:#18181c;--surface2:#1f1f24;--border:#2a2a30;--border2:#363640;
+  --accent:#c8f53c;--accent2:#ff6b35;--accent3:#47c7ff;
+  --text:#e8e8ec;--muted:#5a5a65;--err:#ff5c5c;
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+}
+html,body{min-height:100%}
+body{
+  font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);
+  padding:calc(var(--safe-t) + 18px) 16px calc(var(--safe-b) + 32px);
+  display:flex;flex-direction:column;align-items:center;
+  -webkit-tap-highlight-color:transparent;
+}
+main{width:100%;max-width:440px;display:flex;flex-direction:column;gap:14px}
+
+h1{font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;color:var(--accent);letter-spacing:.02em}
+h1 span{color:var(--muted);font-size:.75rem;font-weight:700;margin-left:8px;letter-spacing:.1em}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+label{display:block;font-size:.6rem;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:7px}
+
+.row{display:flex;gap:8px}
+input[type=text],input[type=url],input[type=password]{
+  flex:1;min-width:0;font-family:'DM Mono',monospace;font-size:.85rem;color:var(--text);
+  background:var(--surface2);border:1px solid var(--border2);border-radius:10px;
+  padding:12px 12px;outline:none;-webkit-appearance:none;
+}
+input:focus{border-color:var(--accent3)}
+.mini-btn{
+  flex-shrink:0;font-family:'DM Mono',monospace;font-size:.62rem;font-weight:500;letter-spacing:.08em;
+  color:var(--text);background:var(--surface2);border:1px solid var(--border2);
+  border-radius:10px;padding:0 14px;cursor:pointer;
+}
+.mini-btn:active{background:var(--border)}
+
+.seg{display:flex;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;overflow:hidden}
+.seg button{
+  flex:1;font-family:'DM Mono',monospace;font-size:.8rem;font-weight:500;padding:11px 0;
+  background:transparent;border:none;color:var(--muted);cursor:pointer;
+}
+.seg button.on{background:var(--accent);color:#0e0e10;font-weight:500}
+
+#go{
+  width:100%;font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;letter-spacing:.04em;
+  color:#0e0e10;background:var(--accent);border:none;border-radius:12px;padding:15px 0;cursor:pointer;
+}
+#go:disabled{background:var(--border2);color:var(--muted)}
+#go:active:not(:disabled){filter:brightness(.85)}
+
+/* progress */
+#panel{display:none}
+#panel.show{display:block}
+.bar{height:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:99px;overflow:hidden;margin:10px 0 8px}
+.bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent3),var(--accent));border-radius:99px;transition:width .5s}
+#stage{font-size:.72rem;color:var(--accent3);letter-spacing:.06em}
+#pct{float:right;font-size:.72rem;color:var(--muted)}
+#vtitle{font-size:.8rem;color:var(--text);margin-top:8px;word-break:break-word;display:none}
+#err{display:none;font-size:.75rem;color:var(--err);line-height:1.5;margin-top:8px;word-break:break-word}
+
+#save{
+  display:none;width:100%;text-align:center;text-decoration:none;margin-top:12px;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:.95rem;color:#0e0e10;
+  background:var(--accent3);border-radius:12px;padding:14px 0;
+}
+#save:active{filter:brightness(.85)}
+details{border-top:1px dashed var(--border);margin-top:4px;padding-top:10px}
+summary{font-size:.62rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;cursor:pointer;list-style:none}
+summary::before{content:'▸ '}
+details[open] summary::before{content:'▾ '}
+details .inner{display:flex;flex-direction:column;gap:12px;padding-top:12px}
+.hint{font-size:.68rem;color:var(--muted);line-height:1.65}
+.hint b{color:var(--text);font-weight:500}
+</style>
+</head>
+<body>
+<main>
+  <h1>// YT SAVER <span>720 · 1080</span></h1>
+
+  <div class="card">
+    <label for="url">YouTube link</label>
+    <div class="row">
+      <input type="url" id="url" placeholder="https://youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="mini-btn" id="paste">PASTE</button>
+    </div>
+    <div style="height:14px"></div>
+    <label>Quality</label>
+    <div class="seg" id="quality">
+      <button data-q="720">720p</button>
+      <button data-q="1080" class="on">1080p</button>
+    </div>
+    <div style="height:16px"></div>
+    <button id="go">DOWNLOAD</button>
+
+    <div id="panel">
+      <div class="bar"><i id="fill"></i></div>
+      <span id="stage"></span><span id="pct"></span>
+      <div id="vtitle"></div>
+      <div id="err"></div>
+      <a id="save" href="#">SAVE VIDEO ↓</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <details id="setup">
+      <summary>Setup — backend &amp; access key</summary>
+      <div class="inner">
+        <div>
+          <label for="backend">Backend URL (Railway)</label>
+          <input type="url" id="backend" placeholder="https://your-app.up.railway.app" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div>
+          <label for="key">Access key (YT_PASSWORD)</label>
+          <input type="password" id="key" placeholder="the secret you set on the server" autocomplete="off">
+        </div>
+        <div class="hint">Saved on this device only. Set the same value as the <b>YT_PASSWORD</b> variable on your Railway service.</div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card hint">
+    <b>iPhone tips</b><br>
+    · The video lands in Safari's download manager → <b>Files ▸ Downloads</b>.<br>
+    · To move it into your camera roll: open it in Files, tap Share, then <b>Save Video</b>.<br>
+    · Add this page to your Home Screen for one-tap access.
+  </div>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = { get k(){return localStorage.getItem('ytdl_key')||''},   set k(v){localStorage.setItem('ytdl_key',v)},
+                  get b(){return localStorage.getItem('ytdl_backend')||''}, set b(v){localStorage.setItem('ytdl_backend',v)},
+                  get q(){return localStorage.getItem('ytdl_quality')||'1080'}, set q(v){localStorage.setItem('ytdl_quality',v)} };
+
+  // ---- settings ----
+  $('backend').value = store.b; $('key').value = store.k;
+  $('backend').addEventListener('change', e => store.b = e.target.value.trim().replace(/\/+$/,''));
+  $('key').addEventListener('change', e => store.k = e.target.value.trim());
+  if (!store.b || !store.k) $('setup').open = true;
+
+  // ---- quality toggle ----
+  const segBtns = [...document.querySelectorAll('#quality button')];
+  const paintSeg = () => segBtns.forEach(b => b.classList.toggle('on', b.dataset.q === store.q));
+  segBtns.forEach(b => b.addEventListener('click', () => { store.q = b.dataset.q; paintSeg(); }));
+  paintSeg();
+
+  // ---- paste ----
+  $('paste').addEventListener('click', async () => {
+    try { const t = await navigator.clipboard.readText(); if (t) $('url').value = t.trim(); } catch { $('url').focus(); }
+  });
+
+  // ---- download flow ----
+  const STAGE_LABEL = { queued:'Queued…', starting:'Preparing…', video:'Downloading video', audio:'Downloading audio', merging:'Merging streams', done:'Ready!' };
+  let polling = null, autoSaved = false;
+
+  function ui(state) {                       // 'idle' | 'busy' | 'done' | 'error'
+    $('go').disabled = state === 'busy';
+    $('go').textContent = state === 'busy' ? 'WORKING…' : (state === 'done' ? 'DOWNLOAD ANOTHER' : 'DOWNLOAD');
+    $('panel').classList.toggle('show', state !== 'idle');
+    $('save').style.display = state === 'done' ? 'block' : 'none';
+    $('err').style.display = state === 'error' ? 'block' : 'none';
+    if (state !== 'done' && state !== 'error') { $('vtitle').style.display = 'none'; }
+  }
+
+  function fail(msg) {
+    clearInterval(polling); polling = null;
+    $('err').textContent = msg;
+    $('stage').textContent = 'Failed'; ui('error');
+  }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(store.b + path, {
+      ...opts,
+      headers: { 'content-type': 'application/json', 'x-yt-key': store.k, ...(opts.headers || {}) }
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('Server error ' + res.status));
+    return body;
+  }
+
+  $('go').addEventListener('click', async () => {
+    const url = $('url').value.trim();
+    if (!store.b)  { $('setup').open = true; return fail('Set your backend URL first (Setup below).'); }
+    if (!store.k)  { $('setup').open = true; return fail('Set your access key first (Setup below).'); }
+    if (!url)      return fail('Paste a YouTube link first.');
+
+    autoSaved = false;
+    $('fill').style.width = '0%'; $('pct').textContent = ''; $('stage').textContent = 'Contacting server…';
+    ui('busy');
+
+    let id;
+    try { ({ id } = await api('/api/yt/start', { method:'POST', body: JSON.stringify({ url, quality: store.q }) })); }
+    catch (e) { return fail(e.message); }
+
+    polling = setInterval(async () => {
+      let s;
+      try { s = await api('/api/yt/status/' + id); }
+      catch (e) { return fail(e.message); }
+
+      $('stage').textContent = STAGE_LABEL[s.stage] || s.stage;
+      $('fill').style.width = (s.percent || 0) + '%';
+      $('pct').textContent = (s.percent || 0) + '%';
+
+      if (s.state === 'error') return fail(s.error || 'Download failed.');
+      if (s.state === 'done') {
+        clearInterval(polling); polling = null;
+        $('fill').style.width = '100%'; $('pct').textContent = s.size ? (s.size/1048576).toFixed(1) + ' MB' : '';
+        if (s.title) { $('vtitle').textContent = s.title; $('vtitle').style.display = 'block'; }
+        const fileUrl = store.b + '/api/yt/file/' + id + '?key=' + encodeURIComponent(store.k);
+        $('save').href = fileUrl;
+        ui('done');
+        // auto-hand the file to Safari's download manager
+        if (!autoSaved) { autoSaved = true; window.location.href = fileUrl; }
+      }
+    }, 1200);
+  });
+})();
+</script>
+</body>
+</html>
